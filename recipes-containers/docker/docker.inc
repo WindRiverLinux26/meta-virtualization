@@ -13,7 +13,7 @@ RDEPENDS:${PN} = "util-linux util-linux-unshare iptables \
                   ${@bb.utils.contains('DISTRO_FEATURES', 'systemd', '', 'cgroup-lite', d)} \
                   bridge-utils \
                  "
-RDEPENDS:${PN} += "virtual-containerd ${VIRTUAL-RUNTIME_container_runtime}"
+RDEPENDS:${PN} += "virtual-containerd virtual-runc"
 
 RRECOMMENDS:${PN} = "kernel-module-dm-thin-pool \
                      kernel-module-nf-conntrack \
