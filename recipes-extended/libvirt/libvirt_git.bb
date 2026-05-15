@@ -5,7 +5,7 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=b234ee4d69f5fce4486a80fdaf4a4263 \
                     file://COPYING.LESSER;md5=4b54a1fd55a448865a0b32d41598759d"
 SECTION = "console/tools"
 
-DEPENDS = "bridge-utils gnutls libxml2 lvm2 avahi parted curl libpcap util-linux e2fsprogs pm-utils \
+DEPENDS = "bridge-utils gnutls libxml2 lvm2 parted curl libpcap util-linux e2fsprogs pm-utils \
 	   iptables dnsmasq readline libtasn1 libxslt-native acl libdevmapper libtirpc \
            python3-docutils-native \
 	   ${@bb.utils.contains('PACKAGECONFIG', 'polkit', 'shadow-native', '', d)} \
@@ -177,8 +177,6 @@ PACKAGECONFIG[firewalld] = "-Dfirewalld=enabled, -Dfirewalld=disabled,"
 PACKAGECONFIG[libpcap] = "-Dlibpcap=enabled, -Dlibpcap=disabled,libpcap,libpcap"
 PACKAGECONFIG[numad] = "-Dnumad=enabled, -Dnumad=disabled,"
 PACKAGECONFIG[nftables] = ""
-# Require systemd to add openssl to PACKAGECONFIG, so disable it at default.
-PACKAGECONFIG[secrets] = "-Ddriver_secrets=enabled, -Ddriver_secrets=disabled,"
 
 CVE_STATUS[CVE-2014-8135] = "fixed-version: Fixed in 1.2.11, NVD tracks this as version-less vulnerability"
 CVE_STATUS[CVE-2014-8136] = "fixed-version: Fixed in 1.2.11, NVD tracks this as version-less vulnerability"
@@ -233,15 +231,6 @@ do_install:append() {
                 mkdir -p ${D}${systemd_system_unitdir}
                 mv ${D}${prefix}/lib/systemd/system/* ${D}${systemd_system_unitdir}
                 rmdir ${D}${prefix}/lib/systemd/system ${D}${prefix}/lib/systemd
-            fi
-
-            if ! ${@bb.utils.contains('PACKAGECONFIG', 'secrets', 'true', 'false', d)}; then
-                sed -i \
-                    -e '/^Requires=virt-secret-init-encryption.service/d' \
-                    -e '/^After=virt-secret-init-encryption.service/d' \
-                    -e '/^Environment=SECRETS_ENCRYPTION_KEY=/d' \
-                    -e '/^LoadCredentialEncrypted=/d' \
-                    ${D}${systemd_system_unitdir}/libvirtd.service
             fi
 	fi
 

@@ -327,27 +327,43 @@ normalize_arch_from_oci() {
     esac
 }
 
-# Check if OCI directory contains a multi-architecture Image Index
-# Usage: is_oci_image_index <oci_dir>
-# Returns: 0 if multi-arch, 1 if single-arch or not OCI
-is_oci_image_index() {
+# Resolve the file containing platform manifests in an OCI directory.
+# Handles two layouts:
+#   Flat:   index.json directly contains manifests with platform info
+#   Nested: index.json → single image index blob → platform manifests
+#           (skopeo-compatible format)
+# Usage: _resolve_oci_platform_file <oci_dir>
+# Prints: path to the file containing platform manifests, or empty
+_resolve_oci_platform_file() {
     local oci_dir="$1"
 
     [ -f "$oci_dir/index.json" ] || return 1
 
-    # Check if index.json has manifests with platform info
-    # Multi-arch images have "platform" object in manifest entries
+    # Flat layout: platform info directly in index.json
     if grep -q '"platform"' "$oci_dir/index.json" 2>/dev/null; then
-        # Also verify there are multiple manifests
-        local manifest_count=$(grep -c '"digest"' "$oci_dir/index.json" 2>/dev/null || echo "0")
-        [ "$manifest_count" -gt 1 ] && return 0
-
-        # Single manifest with platform info is also a valid Image Index
-        # (could be a multi-arch image built with only one arch so far)
+        echo "$oci_dir/index.json"
         return 0
     fi
 
+    # Nested layout: index.json has a single entry with image.index mediaType
+    if grep -q 'image\.index' "$oci_dir/index.json" 2>/dev/null; then
+        local index_digest=$(grep -o '"sha256:[a-f0-9]*"' "$oci_dir/index.json" 2>/dev/null | head -1 | tr -d '"' | sed 's/sha256://')
+        if [ -n "$index_digest" ] && [ -f "$oci_dir/blobs/sha256/$index_digest" ]; then
+            if grep -q '"platform"' "$oci_dir/blobs/sha256/$index_digest" 2>/dev/null; then
+                echo "$oci_dir/blobs/sha256/$index_digest"
+                return 0
+            fi
+        fi
+    fi
+
     return 1
+}
+
+# Check if OCI directory contains a multi-architecture Image Index
+# Usage: is_oci_image_index <oci_dir>
+# Returns: 0 if multi-arch, 1 if single-arch or not OCI
+is_oci_image_index() {
+    _resolve_oci_platform_file "$1" >/dev/null 2>&1
 }
 
 # Get list of available platforms in a multi-arch OCI Image Index
@@ -355,12 +371,10 @@ is_oci_image_index() {
 # Returns: Space-separated list of architectures (e.g., "arm64 amd64")
 get_oci_platforms() {
     local oci_dir="$1"
+    local platform_file
+    platform_file=$(_resolve_oci_platform_file "$oci_dir") || return 1
 
-    [ -f "$oci_dir/index.json" ] || return 1
-
-    # Extract architecture values from platform objects
-    # Format: "platform": { "architecture": "arm64", "os": "linux" }
-    grep -o '"architecture"[[:space:]]*:[[:space:]]*"[^"]*"' "$oci_dir/index.json" 2>/dev/null | \
+    grep -o '"architecture"[[:space:]]*:[[:space:]]*"[^"]*"' "$platform_file" 2>/dev/null | \
         sed 's/.*"\([^"]*\)"$/\1/' | \
         tr '\n' ' ' | sed 's/ $//'
 }
@@ -373,38 +387,34 @@ select_platform_manifest() {
     local oci_dir="$1"
     local target_arch="$2"
 
-    [ -f "$oci_dir/index.json" ] || return 1
-
     # Normalize target arch to OCI convention
     local oci_arch=$(normalize_arch_to_oci "$target_arch")
 
-    # Parse index.json to find manifest with matching platform
+    # Resolve the file containing platform manifests (flat or nested)
+    local manifest_index
+    manifest_index=$(_resolve_oci_platform_file "$oci_dir") || return 1
+
+    # Parse the manifest index to find manifest with matching platform
     # This is done without jq using grep/sed for portability
     local in_manifest=0
     local current_digest=""
     local current_arch=""
     local matched_digest=""
 
-    # Read index.json line by line
     while IFS= read -r line; do
-        # Track when we're inside a manifest entry
         if echo "$line" | grep -q '"manifests"'; then
             in_manifest=1
             continue
         fi
 
         if [ "$in_manifest" = "1" ]; then
-            # Extract digest
             if echo "$line" | grep -q '"digest"'; then
                 current_digest=$(echo "$line" | sed 's/.*"sha256:\([a-f0-9]*\)".*/\1/')
             fi
 
-            # Extract architecture from platform
-            # Handle both formats: "architecture": "arm64" or {"architecture": "arm64", ...}
             if echo "$line" | grep -q '"architecture"'; then
                 current_arch=$(echo "$line" | sed 's/.*"architecture"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
 
-                # Check if this matches our target
                 if [ "$current_arch" = "$oci_arch" ]; then
                     matched_digest="$current_digest"
                     OCI_SELECTED_PLATFORM="$current_arch"
@@ -412,13 +422,12 @@ select_platform_manifest() {
                 fi
             fi
 
-            # Reset on closing brace (end of manifest entry)
             if echo "$line" | grep -q '^[[:space:]]*}'; then
                 current_digest=""
                 current_arch=""
             fi
         fi
-    done < "$oci_dir/index.json"
+    done < "$manifest_index"
 
     if [ -n "$matched_digest" ]; then
         echo "$matched_digest"
@@ -718,6 +727,11 @@ ${BOLD}GLOBAL OPTIONS:${NC}
     --registry <url>      Default registry for unqualified images (e.g., 10.0.2.2:5000/yocto)
     --no-registry         Disable baked-in default registry (use images as-is)
     --insecure-registry <host:port>  Mark registry as insecure (HTTP). Can repeat.
+    --config <path>       Registry auth file (docker config.json / podman auth.json)
+                          Defaults to \$VDKR_CONFIG / \$VPDMN_CONFIG. The file must be
+                          mode 0600 or stricter; it is passed to the guest over a
+                          dedicated read-only virtio-9p share and never appears on
+                          the kernel cmdline.
     --verbose, -v         Enable verbose output
     --help, -h            Show this help
 
@@ -857,6 +871,7 @@ build_runner_args() {
     [ -n "$CA_CERT" ] && args+=("--ca-cert" "$CA_CERT")
     [ -n "$REGISTRY_USER" ] && args+=("--registry-user" "$REGISTRY_USER")
     [ -n "$REGISTRY_PASS" ] && args+=("--registry-pass" "$REGISTRY_PASS")
+    [ -n "$AUTH_CONFIG" ] && args+=("--config" "$AUTH_CONFIG")
 
     # Xen: pass exit grace period
     [ -n "${VXN_EXIT_GRACE_PERIOD:-}" ] && args+=("--exit-grace-period" "$VXN_EXIT_GRACE_PERIOD")
@@ -880,6 +895,11 @@ SECURE_REGISTRY="false"
 CA_CERT=""
 REGISTRY_USER=""
 REGISTRY_PASS=""
+# Registry auth config file. Env-var default depends on which CLI wrapper is
+# in use (vdkr → $VDKR_CONFIG, vpdmn → $VPDMN_CONFIG), then falls back to the
+# other for convenience when sharing a single host-side file. Overridden by
+# the --config CLI flag below.
+AUTH_CONFIG="${VDKR_CONFIG:-${VPDMN_CONFIG:-}}"
 COMMAND=""
 COMMAND_ARGS=()
 
@@ -975,6 +995,13 @@ while [ $# -gt 0 ]; do
             ;;
         --registry-password|--registry-pass)
             REGISTRY_PASS="$2"
+            shift 2
+            ;;
+        --config)
+            # Path to a docker/podman registry auth file (config.json / auth.json).
+            # Overrides $VDKR_CONFIG / $VPDMN_CONFIG. Forwarded to vrunner.sh --config,
+            # which validates the file and stages it on a dedicated read-only 9p share.
+            AUTH_CONFIG="$2"
             shift 2
             ;;
         -it|--interactive)
@@ -1858,11 +1885,11 @@ case "$COMMAND" in
 
                 # Check for multi-architecture OCI Image Index
                 if is_oci_image_index "$INPUT_PATH"; then
-                    local available_platforms=$(get_oci_platforms "$INPUT_PATH")
+                    available_platforms=$(get_oci_platforms "$INPUT_PATH")
                     [ "$VERBOSE" = "true" ] && echo -e "${CYAN}[$VCONTAINER_RUNTIME_NAME]${NC} Multi-arch OCI detected. Available: $available_platforms" >&2
 
                     # Select manifest for target architecture
-                    local manifest_digest=$(select_platform_manifest "$INPUT_PATH" "$TARGET_ARCH")
+                    manifest_digest=$(select_platform_manifest "$INPUT_PATH" "$TARGET_ARCH")
                     if [ -z "$manifest_digest" ]; then
                         echo -e "${RED}[$VCONTAINER_RUNTIME_NAME]${NC} Architecture $TARGET_ARCH not found in multi-arch image" >&2
                         echo -e "${YELLOW}[$VCONTAINER_RUNTIME_NAME]${NC} Available platforms: $available_platforms" >&2
@@ -1870,7 +1897,7 @@ case "$COMMAND" in
                         exit 1
                     fi
 
-                    echo -e "${GREEN}[$VCONTAINER_RUNTIME_NAME]${NC} Selected platform: $OCI_SELECTED_PLATFORM (from multi-arch image)" >&2
+                    echo -e "${GREEN}[$VCONTAINER_RUNTIME_NAME]${NC} Selected platform: $(normalize_arch_to_oci "$TARGET_ARCH")/linux (from multi-arch image)" >&2
 
                     # Extract single-platform OCI to temp directory
                     TEMP_OCI_DIR=$(mktemp -d)
@@ -2488,12 +2515,20 @@ case "$COMMAND" in
             STORAGE_CMD="${COMMAND_ARGS[0]}"
         fi
 
+        # When --state-dir is passed, scan its parent as the storage root
+        # (STATE_DIR is an arch subdir like ~/.vpdmn-test/x86_64, so the
+        # parent ~/.vpdmn-test/ is the root containing all arch dirs).
+        VSTORAGE_ROOT="$DEFAULT_STATE_DIR"
+        if [ -n "$STATE_DIR" ]; then
+            VSTORAGE_ROOT="$(dirname "$STATE_DIR")"
+        fi
+
         case "$STORAGE_CMD" in
             list)
                 echo "$VCONTAINER_RUNTIME_NAME storage directories:"
                 echo ""
                 found=0
-                for state_dir in "$DEFAULT_STATE_DIR"/*/; do
+                for state_dir in "$VSTORAGE_ROOT"/*/; do
                     [ -d "$state_dir" ] || continue
                     found=1
                     instance=$(basename "$state_dir")
@@ -2522,8 +2557,8 @@ case "$COMMAND" in
                 fi
 
                 # Total size
-                if [ -d "$DEFAULT_STATE_DIR" ] && [ $found -gt 0 ]; then
-                    total=$(du -sh "$DEFAULT_STATE_DIR" 2>/dev/null | cut -f1)
+                if [ -d "$VSTORAGE_ROOT" ] && [ $found -gt 0 ]; then
+                    total=$(du -sh "$VSTORAGE_ROOT" 2>/dev/null | cut -f1)
                     echo "Total: $total"
                 fi
                 ;;
@@ -2536,7 +2571,7 @@ case "$COMMAND" in
 
             df)
                 # Detailed breakdown
-                for state_dir in "$DEFAULT_STATE_DIR"/*/; do
+                for state_dir in "$VSTORAGE_ROOT"/*/; do
                     [ -d "$state_dir" ] || continue
                     instance=$(basename "$state_dir")
                     echo "${BOLD}$instance${NC}:"
@@ -2557,7 +2592,7 @@ case "$COMMAND" in
                 arch="${COMMAND_ARGS[1]:-}"
                 if [ "$arch" = "--all" ]; then
                     # Stop any running memres first
-                    for pid_file in "$DEFAULT_STATE_DIR"/*/daemon.pid; do
+                    for pid_file in "$VSTORAGE_ROOT"/*/daemon.pid; do
                         [ -f "$pid_file" ] || continue
                         pid=$(cat "$pid_file" 2>/dev/null)
                         if [ -n "$pid" ] && [ -d "/proc/$pid" ]; then
@@ -2566,11 +2601,11 @@ case "$COMMAND" in
                         fi
                     done
                     echo -e "${YELLOW}[$VCONTAINER_RUNTIME_NAME]${NC} Removing all storage directories..."
-                    rm -rf "$DEFAULT_STATE_DIR"
+                    rm -rf "$VSTORAGE_ROOT"
                     echo -e "${GREEN}[$VCONTAINER_RUNTIME_NAME]${NC} All storage cleaned."
                 elif [ -n "$arch" ]; then
                     # Clean specific arch
-                    clean_dir="$DEFAULT_STATE_DIR/$arch"
+                    clean_dir="$VSTORAGE_ROOT/$arch"
                     if [ -d "$clean_dir" ]; then
                         # Stop memres if running
                         if [ -f "$clean_dir/daemon.pid" ]; then
