@@ -9,7 +9,7 @@ Because of this focus, CNI has a wide range of support and the specification \
 is simple to implement. \
 "
 
-SRCREV_cni = "7c270076995b6a35f4774ce94dafcf266d1c6925"
+SRCREV_cni = "a28faab92684aed3af64d5085733c34550ce9877"
 SRCREV_plugins = "6d8f05b82e47b3bf573986146842c08f358270a7"
 SRCREV_flannel_plugin = "09e4c7f9bee6abdf56e97f167a85248a7084f7ef"
 SRCREV_FORMAT = "cni_plugins"
