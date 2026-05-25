@@ -1,4 +1,4 @@
-From 55aebd87ee81f851d088beea8688e3e599c2bced Mon Sep 17 00:00:00 2001
+From f153bc9b54b2d43e572873b7a5ca490b97d2353d Mon Sep 17 00:00:00 2001
 From: Bruce Ashfield <bruce.ashfield@gmail.com>
 Date: Fri, 17 Jul 2020 14:40:12 -0400
 Subject: [PATCH] sloci-image: fix variant quoting
@@ -14,12 +14,13 @@ when a variant is defined.
 Upstream-Status: Inappropriate [embedded specific]
 
 Signed-off-by: Bruce Ashfield <bruce.ashfield@gmail.com>
+Signed-off-by: Haiqing Bai <haiqing.bai@windriver.com>
 ---
  sloci-image | 3 ++-
  1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/sloci-image b/sloci-image
-index be8e79a..e0dc469 100755
+index 7c0c3bd..a9bcd44 100755
 --- a/sloci-image
 +++ b/sloci-image
 @@ -298,6 +298,7 @@ oci_image_config() {
@@ -34,11 +35,11 @@ index be8e79a..e0dc469 100755
  	      "digest": "$manifest_digest",
  	      "platform": {
  	        "architecture": "$(oci_arch $CFG_ARCH)",
--	        ${CFG_ARCH_VARIANT:+"\"variant\": $(json_string "$CFG_ARCH_VARIANT"),"}
-+		${CFG_ARCH_VARIANT:+$variant_string}
+-	        ${CFG_ARCH_VARIANT:+"$(echo \"variant\"): $(json_string "$CFG_ARCH_VARIANT"),"}
++	        ${CFG_ARCH_VARIANT:+$variant_string}
  	        "os": "$CFG_OS"
  	      },
  	      "annotations": {
 -- 
-2.19.1
+2.51.0
 
