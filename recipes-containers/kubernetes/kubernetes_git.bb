@@ -15,7 +15,7 @@ PE = "1"
 # The value is derived from the following command in k8s repo:
 #   git describe --tags --match='v*' --abbrev=14 "5fe148234f8ab1184f26069c4f7bef6c37efe347^{commit}"
 # This following setting is needed in case, otherwise there'll be runtime error in case of shallow tarball.
-export KUBE_GIT_VERSION = "v1.32.0-26-g5fe148234f8ab1"
+export KUBE_GIT_VERSION = "v1.35.5"
 
 BBCLASSEXTEND = "devupstream:target"
 LIC_FILES_CHKSUM:class-devupstream = "file://LICENSE;md5=3b83ef96387f14655fc854ddc3c6bd57"
