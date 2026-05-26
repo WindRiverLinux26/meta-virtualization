@@ -26,9 +26,9 @@ RDEPENDS:libvirt-libvirtd:append:aarch64 = " dmidecode"
 #connman blocks the 53 port and libvirtd can't start its DNS service
 RCONFLICTS:${PN}_libvirtd = "connman"
 
-SRCREV_libvirt = "9fa6beff05728a32dd11f7ccb7e3c97fca510029"
+SRCREV_libvirt = "93a00a3db8c8b5e3ee4a97ff2539193e5e7accff"
 
-LIBVIRT_VERSION = "12.1.0"
+LIBVIRT_VERSION = "12.2.0"
 PV = "v${LIBVIRT_VERSION}+git"
 
 SRC_URI = "gitsm://github.com/libvirt/libvirt.git;name=libvirt;protocol=https;branch=master \
