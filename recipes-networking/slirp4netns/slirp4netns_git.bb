@@ -6,7 +6,7 @@ network namespace to the usermode TCP/IP stack ("slirp")."
 LICENSE = "GPL-2.0-or-later"
 LIC_FILES_CHKSUM = "file://COPYING;md5=1e2efd29c201480c6be2744d9edade26"
 
-SRCREV = "6be0d5313870eaa12f6e9f7fede09bbe742796b6"
+SRCREV = "944fa94090e1fd1312232cbc0e6b43585553d824"
 SRC_URI = "git://github.com/rootless-containers/slirp4netns.git;nobranch=1;protocol=https"
 
 PV = "1.3.3+git"
