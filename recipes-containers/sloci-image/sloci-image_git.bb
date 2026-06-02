@@ -9,7 +9,7 @@ SRC_URI = "git://github.com/jirutka/sloci-image.git;branch=master;protocol=https
 DEPENDS = ""
 
 SRCREV = "b45be2e049c5c55acb04a5edb017b793d2d9e677"
-PV = "0.1.2+git"
+PV = "v0.1.2+git"
 
 do_compile() { 
 	:
