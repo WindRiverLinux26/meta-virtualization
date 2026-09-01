@@ -25,7 +25,7 @@ GO_INSTALL = "${GO_IMPORT}"
 GO_WORKDIR = "${GO_INSTALL}"
 GOBUILDFLAGS += "-mod vendor"
 
-SRCREV = "310b1c8f53f3c0a7884f82fe51083577c473490a"
+SRCREV = "1d61d52173ff67b920d2e9d5e308c3761017c85e"
 
 SRC_URI = " \
     git://github.com/containers/buildah;branch=release-1.43;name=buildah;protocol=https;destsuffix=${GO_SRCURI_DESTSUFFIX} \

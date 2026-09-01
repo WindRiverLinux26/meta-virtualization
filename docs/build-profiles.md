@@ -19,6 +19,7 @@ meta-virt-host.conf              <- base (always required first)
   container-host-k3s-node.conf
   container-host-incus.conf
   xen-host.conf                  <- Xen support (composable)
+  kvm-host.conf                  <- KVM/libvirt support (composable)
 meta-virt-dev.conf               <- QEMU dev settings (opt-in)
 container-registry.conf          <- registry config (opt-in)
 
@@ -158,6 +159,15 @@ Xen hypervisor support. Composable with any container profile.
 - `IMAGE_INSTALL:append:pn-xen-image-minimal = " vxn containerd-opencontainers"`
 
 **Use with:** `bitbake xen-image-minimal`
+
+### kvm-host.conf
+
+KVM/libvirt support. Composable with any container profile.
+
+**Sets:**
+- `DISTRO_FEATURES:append = " kvm"`
+
+**Use with:** `bitbake kvm-image-minimal`
 
 ### meta-virt-dev.conf
 

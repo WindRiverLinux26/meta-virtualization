@@ -18,7 +18,7 @@ CVE_VERSION = "3.5.0"
 
 FILESEXTRAPATHS:append := "${THISDIR}/${PN}-git:"
 
-SRCREV = "7921d9c6924b8934ea1de9481891ac1172649280"
+SRCREV = "04b05b31ade4d903589a90a14861730562285be7"
 SRC_URI += "git://github.com/openvswitch/ovs.git;protocol=https;branch=branch-3.7 \
             file://run-ptest \
             file://disable_m4_check.patch \
